@@ -1,8 +1,17 @@
+# Secrets
 .env
 credentials.json
-credentials.json%
-token.json
+token.pickle
 
-# Python
-venv/
+# Large files
+.chroma/emails/*.bin
+
+# Other common ignores
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+.DS_Store
+.env.*
+node_modules/
