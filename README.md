@@ -1,6 +1,6 @@
 # 📧 Smart Email Digest (RAG + Streamlit)
 
-A modern, agentic email digest and Q&A app using Retrieval-Augmented Generation (RAG) with Langgraph, ChromaDB, and OpenAI. Process your Gmail inbox, get executive and market summaries, and ask questions about your emails—all in a beautiful Streamlit UI.
+A modern, agentic email digest and Q&A app using Retrieval-Augmented Generation (RAG) with LangGraph, ChromaDB, and OpenAI. Process your Gmail inbox, get executive and market summaries, and ask questions about your emails—all in a beautiful Streamlit UI.
 
 ---
 
