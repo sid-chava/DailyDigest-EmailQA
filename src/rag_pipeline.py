@@ -50,10 +50,10 @@ def categorize_emails(state: AgentState) -> AgentState:
     
     categorization_prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an expert email categorizer. Categorize each email into one of these categories:
-        - Action Required: Emails that need immediate action or response
-        - High-Priority Read: Important information that should be read soon
+        - Action Required: Emails that need immediate action or response (security, alerts, scheduling, etc.)
+        - High-Priority Read: Important information that should be read soon (notices, important updates, etc.)
         - Market News: News about markets, stocks, or financial information
-        - Other newsletters: Regular newsletters and updates
+        - Other newsletters: Regular newsletters and updates (tech news, quantum computing, job boards, etc., promotional emails)
         
         For each email, provide the category and a brief one-line summary."""),
         ("human", "Here are the emails to categorize: {emails}")
