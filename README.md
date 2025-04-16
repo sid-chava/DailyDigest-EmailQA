@@ -1,6 +1,6 @@
 # 📧 Smart Email Digest (RAG + Streamlit)
 
-A modern, agentic email digest and Q&A app using Retrieval-Augmented Generation (RAG) with LangChain, ChromaDB, and OpenAI. Process your Gmail inbox, get executive and market summaries, and ask questions about your emails—all in a beautiful Streamlit UI.
+A modern, agentic email digest and Q&A app using Retrieval-Augmented Generation (RAG) with Langgraph, ChromaDB, and OpenAI. Process your Gmail inbox, get executive and market summaries, and ask questions about your emails—all in a beautiful Streamlit UI.
 
 ---
 
@@ -58,7 +58,7 @@ streamlit run src/app.py
 ## Notes
 - **ChromaDB** will store embeddings in a `.chroma/` directory by default.
 - **Token/Rate Limits**: The app batches and/or truncates data to avoid OpenAI rate limits, but very large inboxes may still require patience.
-- **Supported Models**: Uses OpenAI's GPT-4.1 and text-embedding-3-small by default, with fallbacks.
+- **Supported Models**: Uses OpenAI's GPT-4.1 and text-embedding-3-large by default, with fallbacks.
 
 ---
 

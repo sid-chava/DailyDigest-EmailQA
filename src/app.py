@@ -9,7 +9,7 @@ load_dotenv()
 
 # Set page config
 st.set_page_config(
-    page_title="Email Digest",
+    page_title="Email Digest - AI Powered",
     page_icon="📧",
     layout="wide"
 )

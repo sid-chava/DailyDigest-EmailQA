@@ -12,6 +12,7 @@ from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 import os
 import time
+import tiktoken
 
 # Define the state
 class AgentState(TypedDict):
@@ -28,15 +29,23 @@ def format_email(email):
     subject = email.get('subject', '')
     sender = email.get('sender', '')
     body = email.get('body', '')
+    snippet = email.get('snippet', '')
+    # Truncate body and snippet to MAX_BODY_LEN
     if body:
         body = body[:MAX_BODY_LEN]
+    if snippet:
+        snippet = snippet[:MAX_BODY_LEN]
+    if snippet:
+        return f"Subject: {subject}\nFrom: {sender}\nSnippet: {snippet}\nBody: {body}\n"
+    elif body:
         return f"Subject: {subject}\nFrom: {sender}\nBody: {body}\n"
     else:
         return f"Subject: {subject}\nFrom: {sender}\n"
 
 # Node functions
 def categorize_emails(state: AgentState) -> AgentState:
-    """Categorize emails into different buckets."""
+    """Categorize emails into different buckets, batching to avoid token limits."""
+    import math
     emails = state["emails"]
     
     categorization_prompt = ChatPromptTemplate.from_messages([
@@ -51,24 +60,24 @@ def categorize_emails(state: AgentState) -> AgentState:
     ])
     
     def run_chain(input):
-        try:
-            llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0)
-            chain = categorization_prompt | llm
-            return chain.invoke(input)
-        except RateLimitError:
-            try:
-                llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
-                chain = categorization_prompt | llm
-                return chain.invoke(input)
-            except RateLimitError:
-                llm = ChatOpenAI(model="gpt-4.1", temperature=0)
-                chain = categorization_prompt | llm
-                return chain.invoke(input)
+        llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0)
+        chain = categorization_prompt | llm
+        return chain.invoke(input)
     
     # Convert emails to string format for the prompt
     email_texts = [format_email(e) for e in emails]
     
-    result = run_chain({"emails": "\n\n".join(email_texts)})
+    # Batch emails to avoid token limit
+    batch_size = 3
+    num_batches = math.ceil(len(email_texts) / batch_size)
+    batch_results = []
+    for i in range(num_batches):
+        batch = email_texts[i * batch_size : (i + 1) * batch_size]
+        result = run_chain({"emails": "\n\n".join(batch)})
+        batch_results.append(result.content)
+    
+    # Combine all batch results into one string for parsing
+    all_results = "\n".join(batch_results)
     
     # Parse the categorization results and update the state
     categories = {
@@ -77,12 +86,9 @@ def categorize_emails(state: AgentState) -> AgentState:
         "Market News": [],
         "Other newsletters": []
     }
-    
-    # Here we need to parse the LLM output and categorize the emails
-    # For now, we'll just store the raw emails in each category
+    # TODO: Parse all_results to assign emails to categories properly.
+    # For now, fallback to subject-based heuristic as before.
     for email in emails:
-        # This is a simplification - in reality, we should parse the LLM output
-        # to determine the correct category
         if "urgent" in email["subject"].lower():
             categories["Action Required"].append(email)
         elif "market" in email["subject"].lower():
@@ -286,7 +292,7 @@ def answer_question_with_rag(state: AgentState, question: str, chroma_collection
     # Set up ChromaDB (persist in a temp dir or memory)
     persist_dir = os.path.join(".chroma", chroma_collection_name)
     os.makedirs(persist_dir, exist_ok=True)
-    embedding = OpenAIEmbeddings(model="text-embedding-3-small")
+    embedding = OpenAIEmbeddings(model="text-embedding-3-large")
     vectordb = Chroma(
         collection_name=chroma_collection_name,
         embedding_function=embedding,
@@ -294,12 +300,36 @@ def answer_question_with_rag(state: AgentState, question: str, chroma_collection
     )
     # Add documents if collection is empty
     if vectordb._collection.count() == 0:
-        batch_size = 25
-        for i in range(0, len(docs), batch_size):
-            batch_docs = docs[i:i+batch_size]
-            batch_metas = metadatas[i:i+batch_size]
-            vectordb.add_texts(batch_docs, metadatas=batch_metas)
-            time.sleep(2)
+        encoding = tiktoken.encoding_for_model("text-embedding-3-large")
+        MAX_TOKENS = 600_000
+        batch_docs = []
+        batch_metas = []
+        batch_tokens = 0
+        sleep_time = 10
+        for doc, meta in zip(docs, metadatas):
+            doc_tokens = len(encoding.encode(doc))
+            if batch_tokens + doc_tokens > MAX_TOKENS and batch_docs:
+                while True:
+                    try:
+                        vectordb.add_texts(batch_docs, metadatas=batch_metas)
+                        time.sleep(sleep_time)
+                        break
+                    except RateLimitError:
+                        sleep_time += 5
+                        time.sleep(sleep_time)
+                batch_docs, batch_metas, batch_tokens = [], [], 0
+            batch_docs.append(doc)
+            batch_metas.append(meta)
+            batch_tokens += doc_tokens
+        if batch_docs:
+            while True:
+                try:
+                    vectordb.add_texts(batch_docs, metadatas=batch_metas)
+                    time.sleep(sleep_time)
+                    break
+                except RateLimitError:
+                    sleep_time += 5
+                    time.sleep(sleep_time)
 
     # Embed and search
     results = vectordb.similarity_search(question, k=5)
@@ -318,17 +348,27 @@ def answer_question_with_rag(state: AgentState, question: str, chroma_collection
     ])
     def run_chain(input):
         try:
-            llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0)
+            llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
             chain = prompt | llm
             return chain.invoke(input)
         except RateLimitError:
             try:
-                llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
-                chain = prompt | llm
-                return chain.invoke(input)
-            except RateLimitError:
                 llm = ChatOpenAI(model="gpt-4.1", temperature=0)
                 chain = prompt | llm
                 return chain.invoke(input)
+            except RateLimitError:
+                try:
+                    llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0)
+                    chain = prompt | llm
+                    return chain.invoke(input)
+                except RateLimitError:
+                    try:
+                        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+                        chain = prompt | llm
+                        return chain.invoke(input)
+                    except RateLimitError:
+                        llm = ChatOpenAI(model="gpt-4o", temperature=0)
+                        chain = prompt | llm
+                        return chain.invoke(input)
     result = run_chain({"context": context, "question": question})
     return result.content

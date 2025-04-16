@@ -5,6 +5,7 @@ token.pickle
 
 # Large files
 .chroma/emails/*.bin
+.chroma/**/*.bin
 
 # Other common ignores
 __pycache__/
